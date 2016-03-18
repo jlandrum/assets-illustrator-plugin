@@ -42,6 +42,7 @@ function showDialog() {
 	    	orientation: 'column', \
 	    	alignChildren: 'left', \
 	    	spacing: 2, \
+		cd0: Checkbox { text:'SVG', value: "+prefs.getBooleanPreference("stmaCD0")+" }, \
 	        cd1: Checkbox { text:'Low DPI (ldpi) (0.75x)', value: "+prefs.getBooleanPreference("stmaCD1")+" }, \
 	        cd2: Checkbox { text:'Medium DPI (mdpi) (1x)', value: "+prefs.getBooleanPreference("stmaCD2")+" }, \
 	        cd3: Checkbox { text:'TV DPI (tvdpi) (1.33x)', value: "+prefs.getBooleanPreference("stmaCD3")+" }, \
@@ -92,18 +93,20 @@ function showDialog() {
 		if (document && folder) {
 			win.enabled = false;
 			var documentName = document.name.replace(".ai","");
-			if (win.targetGroup.cd1.value) saveToRes(75,  "drawable-ldpi", "", true);		
-			if (win.targetGroup.cd2.value) saveToRes(100, "drawable-mdpi", "",true);		
-			if (win.targetGroup.cd3.value) saveToRes(133, "drawable-tvdpi", "", true);		
-			if (win.targetGroup.cd4.value) saveToRes(150, "drawable-hdpi", "", true);		
-			if (win.targetGroup.cd5.value) saveToRes(200, "drawable-xhdpi", "", true);		
-			if (win.targetGroup.cd6.value) saveToRes(300, "drawable-xxhdpi", "", true);		
-			if (win.targetGroup.cd7.value) saveToRes(400, "drawable-xxxdpi", "", true);
-			if (win.targetGroupiOS.cd1.value) saveToRes(100, "iOS",  "", false);		
-			if (win.targetGroupiOS.cd2.value) saveToRes(200, "iOS", "@2x", false);			
-			if (win.targetGroupiOS.cd3.value) saveToRes(win.targetGroupiOS.iosMod.cd3l.value?300:268, "iOS", "@3x", false);			
-			if (win.targetGroupSpecial.cd1.value) saveToRes(100, "drawable-nodpi", "", true);			
+			if (win.targetGroup.cd0.value) saveToRes(100, "drawable","",true,"SVG");
+			if (win.targetGroup.cd1.value) saveToRes(75,  "drawable-ldpi", "", true,"PNG");		
+			if (win.targetGroup.cd2.value) saveToRes(100, "drawable-mdpi", "",true,"PNG");		
+			if (win.targetGroup.cd3.value) saveToRes(133, "drawable-tvdpi", "", true,"PNG");		
+			if (win.targetGroup.cd4.value) saveToRes(150, "drawable-hdpi", "", true,"PNG");		
+			if (win.targetGroup.cd5.value) saveToRes(200, "drawable-xhdpi", "", true,"PNG");		
+			if (win.targetGroup.cd6.value) saveToRes(300, "drawable-xxhdpi", "", true,"PNG");		
+			if (win.targetGroup.cd7.value) saveToRes(400, "drawable-xxxdpi", "", true,"PNG");
+			if (win.targetGroupiOS.cd1.value) saveToRes(100, "iOS",  "", false, "PNG");		
+			if (win.targetGroupiOS.cd2.value) saveToRes(200, "iOS", "@2x", false, "PNG");			
+			if (win.targetGroupiOS.cd3.value) saveToRes(win.targetGroupiOS.iosMod.cd3l.value?300:268, "iOS", "@3x", false, "PNG");			
+			if (win.targetGroupSpecial.cd1.value) saveToRes(100, "drawable-nodpi", "", true, "PNG");			
 
+			prefs.setBooleanPreference("stmaCD0",win.targetGroup.cd0.value);
 			prefs.setBooleanPreference("stmaCD1",win.targetGroup.cd1.value);				
 			prefs.setBooleanPreference("stmaCD2",win.targetGroup.cd2.value);				
 			prefs.setBooleanPreference("stmaCD3",win.targetGroup.cd3.value);				
@@ -141,15 +144,21 @@ function showDialog() {
 /**
 * Scale and export file suffixed by densitySuffix, in a specific folder named folderName
 */
-function saveToRes(scaleTo, folderName, append, lowerCase) {
+function saveToRes(scaleTo, folderName, append, lowerCase, type) {
 	var i, ab, file, options;
 		
 	var myFolder = new Folder(folder.absoluteURI + "/" + folderName);
 	if(!myFolder.exists) myFolder.create();
 	
+	// Ensure only printable layers will be used
+	for (i = 0; i < document.layers.length; i++) {
+		document.layers[i].locked = !document.layers[i].printable;
+	}
+
 	for (i = document.artboards.length - 1; i >= 0; i--) {
 		document.artboards.setActiveArtboardIndex(i);
 		ab = document.artboards[i];
+		document.selectObjectsOnActiveArtboard();
 		
 		if (ab.name.indexOf("*") > -1 && !win.res.value) { 
 			continue;
@@ -169,14 +178,38 @@ function saveToRes(scaleTo, folderName, append, lowerCase) {
 	
 		file = new File(myFolder.fsName + "/" + fileName + append + ".png");
 		
-		options = new ExportOptionsPNG24();
-		options.antiAliasing = true;''
-		options.transparency = true;
-		options.artBoardClipping = true;
-		options.verticalScale = scaleTo;
-		options.horizontalScale = scaleTo;
+		if (type == "PNG") {
+			options = new ExportOptionsPNG24();
+			options.antiAliasing = true;''
+			options.transparency = true;
+			options.artBoardClipping = true;
+			options.verticalScale = scaleTo;
+			options.horizontalScale = scaleTo;
 		
-		document.exportFile(file, ExportType.PNG24, options);
+			document.exportFile(file, ExportType.PNG24, options);
+		} else if (type = "SVG") {
+			var doc = document;
+			var preset = new DocumentPreset();
+			var leftOff = ab.artboardRect[0];
+			var topOff = ab.artboardRect[1];
+
+			preset.width = Math.abs(ab.artboardRect[2] - ab.artboardRect[0]);
+			preset.height = Math.abs(ab.artboardRect[1] - ab.artboardRect[3]);
+			preset.colorMode = document.documentColorSpace;
+			preset.units = document.rulerUnits;
+			var copyDoc = app.documents.addDocument(document.documentColorSpace, preset);
+			activeDocument = doc;
+
+			for (var j = 0; j < selection.length; j++) {
+				var item = selection[j].duplicate(copyDoc.layers[0], ElementPlacement.INSIDE);
+				item.left -= leftOff;
+				item.top -= topOff;
+			}
+			
+			options = new ExportOptionsSVG();
+			copyDoc.exportFile(file, ExportType.SVG, options);
+			copyDoc.close(SaveOptions.DONOTSAVECHANGES);
+		}
 	}
 }
 
