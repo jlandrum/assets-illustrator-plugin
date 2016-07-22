@@ -32,7 +32,8 @@ function showDialog() {
 	    }\
 	    activePanels: ListBox { \
 	    	preferredSize:[300, 80], \
-	    	enabled: true \
+	    	enabled: true, \
+            properties: { multiselect: true} \
 	    } \
 	    res: Checkbox { text:'Include Restricted in Compile', value: false } \
 	    androidTitle: StaticText { \
@@ -155,11 +156,19 @@ function saveToRes(scaleTo, folderName, append, lowerCase, type) {
 		document.layers[i].locked = !document.layers[i].printable;
 	}
 
+    var items = [];
+    if (win.activePanels.selection.length > 0) {
+        items = String(win.activePanels.selection).split(',');
+    }
+    
 	for (i = document.artboards.length - 1; i >= 0; i--) {
 		document.artboards.setActiveArtboardIndex(i);
 		ab = document.artboards[i];
 		document.selectObjectsOnActiveArtboard();
 		
+        if (items.length > 0 && indexOf(items,ab.name) == -1) {
+            continue;    
+        }
 		if (ab.name.indexOf("*") > -1 && !win.res.value) { 
 			continue;
 		}
@@ -175,35 +184,44 @@ function saveToRes(scaleTo, folderName, append, lowerCase, type) {
 			}
 			fileName = fileNameLowerCase;
 		}
-	
-		file = new File(myFolder.fsName + "/" + fileName + append + ".png");
-		
+	        
 		if (type == "PNG") {
+			file = new File(myFolder.fsName + "/" + fileName + append + ".png");
+		
 			options = new ExportOptionsPNG24();
-			options.antiAliasing = true;''
+			options.antiAliasing = true;
 			options.transparency = true;
 			options.artBoardClipping = true;
 			options.verticalScale = scaleTo;
 			options.horizontalScale = scaleTo;
 		
+             
 			document.exportFile(file, ExportType.PNG24, options);
 		} else if (type = "SVG") {
+			file = new File(myFolder.fsName + "/" + fileName + append + ".svg");
+		
 			var doc = document;
 			var preset = new DocumentPreset();
 			var leftOff = ab.artboardRect[0];
 			var topOff = ab.artboardRect[1];
-
+            
 			preset.width = Math.abs(ab.artboardRect[2] - ab.artboardRect[0]);
 			preset.height = Math.abs(ab.artboardRect[1] - ab.artboardRect[3]);
 			preset.colorMode = document.documentColorSpace;
 			preset.units = document.rulerUnits;
 			var copyDoc = app.documents.addDocument(document.documentColorSpace, preset);
-			activeDocument = doc;
+ 
+			copyDoc.activate();
+
+			leftOff -= copyDoc.artboards[0].artboardRect[0];
+			topOff -= copyDoc.artboards[0].artboardRect[1];
+
+			doc.activate();
 
 			for (var j = 0; j < selection.length; j++) {
 				var item = selection[j].duplicate(copyDoc.layers[0], ElementPlacement.INSIDE);
-				item.left -= leftOff;
-				item.top -= topOff;
+				item.left += leftOff;
+				item.top += topOff;
 			}
 			
 			options = new ExportOptionsSVG();
@@ -213,6 +231,14 @@ function saveToRes(scaleTo, folderName, append, lowerCase, type) {
 	}
 }
 
+function indexOf(array, value) {
+    for (var i = 0; i < array.length; i++) {
+        if (array[i] == value) return i;
+    }
+    return -1;
+}
+
 function isUpperCase(myString) { 
       return (myString == myString.toUpperCase()); 
 } 
+
